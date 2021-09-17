@@ -9,6 +9,7 @@ import urllib
 import urllib.request
 import requests
 import json, argparse
+import ndjson
 from fpdf import FPDF
 import shutil
 
@@ -16,117 +17,78 @@ import shutil
 session = requests.Session()
 
 def getPlayerDetails(username):
-    baseUrl = "https://api.chess.com/pub/player/" + username
-
+    baseUrl = "https://lichess.org/api/user/" + username
+    
     response = session.get(baseUrl)
     details = response.json()
-    dumps(details,file_name=username+'/details.json')
+    dumps(details,file_name=username+'/user_details.json')
 
-    if "avatar" in details:
-        avatar = details["avatar"]
-        filename = avatar.split(".")
-        extension = filename[-1]
-
-        r = requests.get(avatar,stream=True)
-        if r.status_code == 200:
-            r.raw.decode_content = True
-            avatar = username+"."+str(extension)
-            #print(logo)
-            with open(avatar,'wb') as f:
-                shutil.copyfileobj(r.raw,f)
-                details["avatar"] = avatar
-        else:
-            print("\nError downloading the user's avatar. Replacing it with default")
-            details["avatar"] = 'defaultLogo.jpeg'
-    else:
-        print("\nError downloading the user's avatar. Replacing it with default")
-        details["avatar"] = 'defaultLogo.jpeg'
-    
     #print(stats)
     return details
 
+
+def getPlayerRatingHistory(username):
+    baseUrl = "https://lichess.org/api/user/" + username + "/rating-history"
+
+    response = session.get(baseUrl)
+    details = response.json()
+    dumps(details,file_name=username+'/rating-history.json')
+
+    #print(stats)
+    return details
+
+def getPlayerPerformance(username):
+    baseUrl = "https://lichess.org/api/user/" + username + "/perf/"
+    perf = ['ultraBullet','bullet','blitz','rapid','classical','correspondence']
+    for parameter in perf:    
+        response = session.get(baseUrl+parameter)
+        #print(response)
+        details = response.json()
+        dumps(details,file_name=username+'/perf_'+parameter+'.json')
+    #print(stats)
+    return details
+
+
 def getUserGames(username):
     #username = "sprocket314"
-    baseUrl = "https://api.chess.com/pub/player/" + username + "/games/"
-    archivesUrl = baseUrl + "archives"
-
-    #read the archives url and store in a list
-    f = urllib.request.urlopen(archivesUrl)
-    archives = f.read().decode("utf-8")
-    archives = archives.replace("{\"archives\":[\"", "\",\"")
-    archivesList = archives.split("\",\"" + baseUrl)
-    archivesList[len(archivesList)-1] = archivesList[len(archivesList)-1].rstrip("\"]}")
-
-    #download all the archives
-    for i in range(len(archivesList)-1):
-        url = baseUrl + archivesList[i+1] + "/pgn"
-        filename = archivesList[i+1].replace("/", "-")
-        if not os.path.exists(username+"/chess_games"):
-            os.mkdir(username+"/chess_games")
-        urllib.request.urlretrieve(url, username+"/chess_games/" + filename + ".pgn") #change
-        print(filename + ".pgn has been downloaded.")
-    print ("All files have been downloaded.")
-
-def getPlayerMatches(username):
-    baseUrl = "https://api.chess.com/pub/player/" + username + "/matches"
-
-    response = session.get(baseUrl)
-    matches = response.json()
-    dumps(matches,file_name=username+'/matches.json')
-    #print(matches)
-    return matches
-
-def getPlayerStats(username):
-    baseUrl = "https://api.chess.com/pub/player/" + username + "/stats"
-
-    response = session.get(baseUrl)
-    stats = response.json()
-    dumps(stats,file_name=username+'/stats.json')
-    #print(stats)
-    return stats
+    baseUrl = "https://lichess.org/api/games/user/" + username + "?opening=true&evals=true&pgnInJson=true&rated=true&since=1609459200000"
+    headers = {'Accept': 'application/x-ndjson',}
+    response = requests.get(baseUrl, headers=headers)
+    #print(response)
+    games = response.json(cls=ndjson.Decoder)
+    dumps(games,file_name=username+'/games.json')
+    return games
 
 def getClubDetails(clubname):
-    baseUrl = "https://api.chess.com/pub/club/" + clubname
-
+    baseUrl = "https://lichess.org/api/team/" + clubname + "/users"
+    members = []
     response = session.get(baseUrl)
-    clubDetails = response.json()
-    dumps(clubDetails,file_name=clubname+'/details.json')
-    #print(members)
-    return clubDetails
-
-def getClubLogo(clubname):
-    baseUrl = "https://api.chess.com/pub/club/" + clubname
-
-    response = session.get(baseUrl)
-    clubDetails = response.json()
-    clubLogo = clubDetails["icon"]
-    filename = clubLogo.split(".")
-    extension = filename[-1]
-
-    r = requests.get(clubLogo,stream=True)
-    if r.status_code == 200:
-        r.raw.decode_content = True
-        logo = clubname+"/"+clubname+"."+str(extension)
-        #print(logo)
-        with open(logo,'wb') as f:
-            shutil.copyfileobj(r.raw,f)
-            clubLogo = logo
-    else:
-        print("\nError downloading the club's logo. Replacing it with default")
-        clubLogo = 'defaultLogo.jpeg'
-    
-    #print(clubLogo)
-    return clubLogo
-
-
-def getClubMembers(clubname):
-    baseUrl = "https://api.chess.com/pub/club/" + clubname + "/members"
-
-    response = session.get(baseUrl)
-    members = response.json()
-    dumps(members,file_name=clubname+'/members.json')
-    #print(members)
+    clubDetails = response.json(cls=ndjson.Decoder)
+    dumps(clubDetails,file_name=clubname+'/club_details.json')
+    #print(clubDetails[0]["id"])
+    #print(len(clubDetails))
+    for i in range(0,len(clubDetails)):
+        members.append(clubDetails[i]["username"])
+    print(members)
     return members
+
+def getMembersDetails(club,members):
+    print(len(members))
+    for i in range(0,len(members)):
+        print(members[i])
+        if not os.path.exists(club + "/members/"):
+            os.mkdir(club + "/members/")
+        if not os.path.exists(club + "/members/" + members[i]):
+            os.mkdir(club + "/members/" + members[i])
+        baseUrl = "https://lichess.org/api/user/" + members[i]
+        response = session.get(baseUrl)
+        details = response.json()
+        print(details)
+        dumps(details,file_name=club + "/members/" + members[i]+'/user_details.json')
+        time.sleep(1)
+        
+    return
+
 
 def getClubMatches(clubname):
     baseUrl = "https://api.chess.com/pub/club/" + clubname + "/matches"
@@ -509,8 +471,10 @@ def main():
         if not os.path.exists(username):
             os.mkdir(username)
         getPlayerDetails(username)
-        getPlayerMatches(username)
-        getPlayerStats(username)
+        getPlayerRatingHistory(username)
+        getPlayerPerformance(username)
+        getUserGames(username)
+#        getPlayerStats(username)
 
     #t +=1
     #printProgressBar(t,graphNo)
@@ -526,13 +490,14 @@ def main():
         club = args["club"]
         if not os.path.exists(club):
             os.mkdir(club)
-        clubDetails = getClubDetails(club)
-        clubLogo = getClubLogo(club)
-        members = getClubMembers(club)
-        matches = getClubMatches(club)
-        if args["dateRange"]:
-            scope_finished = list(filter(lambda match: (match["start_time"] >= start_epoch) and (match["start_time"] <= end_epoch), matches["finished"]))
-            scope_in_progress = matches["in_progress"]
+        members = getClubDetails(club)
+        getMembersDetails(club,members)
+        #clubLogo = getClubLogo(club)
+        #members = getClubMembers(club)
+        #matches = getClubMatches(club)
+        #if args["dateRange"]:
+        #    scope_finished = list(filter(lambda match: (match["start_time"] >= start_epoch) and (match["start_time"] <= end_epoch), matches["finished"]))
+        #    scope_in_progress = matches["in_progress"]
 
     #t +=1
     #printProgressBar(t,graphNo)
