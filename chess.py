@@ -20,15 +20,19 @@ import re
 ## ----------------------------------------------------------------------------
 session = requests.Session()
 
+def getPlayerStats(username):
+    baseUrl = "https://api.chess.com/pub/player/" + username + "/stats"
+
+    response = session.get(baseUrl)
+    stats = response.json()
+    dumps(stats,file_name=username+'/stats.json')
+    #print(stats)
+    return stats
+
 def getECF(clubcode):
     baseUrl = "https://www.ecfrating.org.uk/v2/new/list_players.php?mode=A&moc=&search=&ECF_code=&club_code="+clubcode+"&assoc_code=&nation=&member_class="
 
     details = []
-#    response = session.get(baseUrl)
-#    response.encoding = 'utf-8'
-#    details = response.text
-
-    only_a_tags = SoupStrainer("a")
     only_td = SoupStrainer("td")
     page = urlopen(baseUrl)
     html = page.read().decode('utf-8')
@@ -41,7 +45,6 @@ def getECF(clubcode):
     soup = soup.strip()
     soup = soup.replace("\n","")    
     #print(soup)
-    #details = re.search("TTT(.+?)DDD",soup).group(1)
     data = soup.partition("TTT")[2].partition("DDD")[0]
     rest = soup.partition("TTT")[2].partition("DDD")[2]
     details.append(data)
@@ -51,7 +54,6 @@ def getECF(clubcode):
         rest = rest.partition("TTT")[2].partition("DDD")[2]
         details.append(data)
     #print(details)
-    #print(len(details))
     ecfdata = []
     fields = ["No.","ECF Code","Member No.","ECF","Sex","Nat.","First Name","Last Name","Club","Assoc.","Last Game","OTB Standard","OTB Rapid","Online Standard","Online Rapid","Online Blitz"]
     for j in range(0,int(len(details)/16)):
@@ -60,8 +62,6 @@ def getECF(clubcode):
             aux.update({fields[i]:details[i+16*j]})
         ecfdata.append(aux)
     #print(ecfdata[195]["Last Name"])
-
-    
     return ecfdata
 
 def getPlayerDetails(username):
@@ -117,13 +117,13 @@ def getClubDetails(clubname):
     #print(len(clubDetails))
     for i in range(0,len(clubDetails)):
         members.append(clubDetails[i]["username"])
-    print(members)
+    #print(members)
     return members
 
 def getMembersDetails(club,members):
-    print(len(members))
+    #print(len(members))
     for i in range(0,len(members)):
-        print(members[i])
+        #print(members[i])
         if not os.path.exists(club + "/members/"):
             os.mkdir(club + "/members/")
         if not os.path.exists(club + "/members/" + members[i]):
@@ -131,11 +131,21 @@ def getMembersDetails(club,members):
         baseUrl = "https://lichess.org/api/user/" + members[i]
         response = session.get(baseUrl)
         details = response.json()
-        print(details)
+        #print(details)
         dumps(details,file_name=club + "/members/" + members[i]+'/user_details.json')
         time.sleep(1)
         
     return
+
+
+def getMembersRating(club,clubcode):
+    membersRating = []
+    ecf = getECF(clubcode)
+    print(ecf)
+
+    return membersRating
+
+
 
 
 def getClubMatches(clubname):
@@ -504,9 +514,6 @@ def main():
     args = getArguments()
 
 
-    ecfRatings = getECF(clubcode)
-
-
     if args["dateRange"]:
         dateRange = args["dateRange"].split(":",1)
         first = dateRange[0].split("-",2)
@@ -544,6 +551,7 @@ def main():
         club = args["club"]
         if not os.path.exists(club):
             os.mkdir(club)
+        membersRating = getMembersRating(club,clubcode)
         members = getClubDetails(club)
         getMembersDetails(club,members)
         #clubLogo = getClubLogo(club)
