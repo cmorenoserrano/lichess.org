@@ -7,14 +7,62 @@ import datetime
 import time
 import urllib
 import urllib.request
+from urllib.request import urlopen
 import requests
 import json, argparse
 import ndjson
 from fpdf import FPDF
 import shutil
+from bs4 import BeautifulSoup
+from bs4 import SoupStrainer
+import re
 
 ## ----------------------------------------------------------------------------
 session = requests.Session()
+
+def getECF(clubcode):
+    baseUrl = "https://www.ecfrating.org.uk/v2/new/list_players.php?mode=A&moc=&search=&ECF_code=&club_code="+clubcode+"&assoc_code=&nation=&member_class="
+
+    details = []
+#    response = session.get(baseUrl)
+#    response.encoding = 'utf-8'
+#    details = response.text
+
+    only_a_tags = SoupStrainer("a")
+    only_td = SoupStrainer("td")
+    page = urlopen(baseUrl)
+    html = page.read().decode('utf-8')
+    soup = BeautifulSoup(html,'html.parser',parse_only=only_td).prettify()
+    #print(soup)
+
+    soup = re.sub("<td.*?>","TTT",soup)
+    soup = re.sub("</td.*?>","DDD",soup)
+    soup = re.sub("<.*?>","",soup)
+    soup = soup.strip()
+    soup = soup.replace("\n","")    
+    #print(soup)
+    #details = re.search("TTT(.+?)DDD",soup).group(1)
+    data = soup.partition("TTT")[2].partition("DDD")[0]
+    rest = soup.partition("TTT")[2].partition("DDD")[2]
+    details.append(data)
+    #print(details)
+    while(len(rest) > 0):
+        data = rest.partition("TTT")[2].partition("DDD")[0]
+        rest = rest.partition("TTT")[2].partition("DDD")[2]
+        details.append(data)
+    #print(details)
+    #print(len(details))
+    ecfdata = []
+    fields = ["No.","ECF Code","Member No.","ECF","Sex","Nat.","First Name","Last Name","Club","Assoc.","Last Game","OTB Standard","OTB Rapid","Online Standard","Online Rapid","Online Blitz"]
+    for j in range(0,int(len(details)/16)):
+        aux = {}
+        for i in range(0,len(fields)):
+            aux.update({fields[i]:details[i+16*j]})
+        ecfdata.append(aux)
+    #print(ecfdata[195]["Last Name"])
+
+    
+    return ecfdata
 
 def getPlayerDetails(username):
     baseUrl = "https://lichess.org/api/user/" + username
@@ -450,9 +498,15 @@ def main():
     #printProgressBar(t,graphNo)
     username = ""
     club = ""
+    clubcode = "7072" #Club code for Guildford Chess Club
     scope_finished = {}
     scope_in_progress = {}
     args = getArguments()
+
+
+    ecfRatings = getECF(clubcode)
+
+
     if args["dateRange"]:
         dateRange = args["dateRange"].split(":",1)
         first = dateRange[0].split("-",2)
